@@ -49,10 +49,20 @@ const App: React.FC = () => {
     }
   }, [session]);
 
+  const mapDbToTransaction = (dbTx: any): Transaction => ({
+    id: dbTx.id,
+    date: dbTx.date,
+    amount: Number(dbTx.amount),
+    type: dbTx.type as TransactionType,
+    accountId: dbTx.account_id,
+    category: dbTx.category,
+    note: dbTx.note,
+    relatedLoanPerson: dbTx.related_loan_person
+  });
+
   const fetchInitialData = async () => {
     setLoading(true);
     try {
-      // Fetch Accounts
       const { data: accData, error: accError } = await supabase
         .from('accounts')
         .select('*')
@@ -63,7 +73,6 @@ const App: React.FC = () => {
       if (accData && accData.length > 0) {
         setAccounts(accData);
       } else {
-        // Create initial cash account if none exists for new user
         const { data: newAcc, error: createError } = await supabase
           .from('accounts')
           .insert([{ 
@@ -76,14 +85,13 @@ const App: React.FC = () => {
         if (newAcc) setAccounts(newAcc);
       }
 
-      // Fetch Transactions
       const { data: txData, error: txError } = await supabase
         .from('transactions')
         .select('*')
         .order('date', { ascending: false });
 
       if (txError) throw txError;
-      setTransactions(txData || []);
+      setTransactions((txData || []).map(mapDbToTransaction));
 
     } catch (err: any) {
       console.error('Data Fetch Error:', err.message);
@@ -117,17 +125,20 @@ const App: React.FC = () => {
       const { data, error } = await supabase
         .from('transactions')
         .insert([{ 
-          ...newTx, 
-          user_id: session.user.id,
-          account_id: newTx.accountId // DB column is account_id
+          amount: newTx.amount,
+          type: newTx.type,
+          date: newTx.date,
+          category: newTx.category,
+          note: newTx.note,
+          account_id: newTx.accountId,
+          related_loan_person: newTx.relatedLoanPerson,
+          user_id: session.user.id
         }])
         .select();
 
       if (error) throw error;
       
-      // Update local state (Optimistic or Refresh)
-      // Since we have DB triggers for balance, we should re-fetch accounts to be accurate
-      setTransactions(prev => [data[0], ...prev]);
+      setTransactions(prev => [mapDbToTransaction(data[0]), ...prev]);
       refreshAccounts();
     } catch (err: any) {
       alert('এন্ট্রি সেভ করতে সমস্যা হয়েছে: ' + err.message);
@@ -147,8 +158,19 @@ const App: React.FC = () => {
 
   const editTransaction = async (id: string, updatedData: Partial<Transaction>) => {
     try {
-      const { error } = await supabase.from('transactions').update(updatedData).eq('id', id);
+      // Map update fields to snake_case
+      const dbUpdate: any = {};
+      if (updatedData.amount !== undefined) dbUpdate.amount = updatedData.amount;
+      if (updatedData.date !== undefined) dbUpdate.date = updatedData.date;
+      if (updatedData.category !== undefined) dbUpdate.category = updatedData.category;
+      if (updatedData.note !== undefined) dbUpdate.note = updatedData.note;
+      if (updatedData.accountId !== undefined) dbUpdate.account_id = updatedData.accountId;
+      if (updatedData.relatedLoanPerson !== undefined) dbUpdate.related_loan_person = updatedData.relatedLoanPerson;
+      if (updatedData.type !== undefined) dbUpdate.type = updatedData.type;
+
+      const { error } = await supabase.from('transactions').update(dbUpdate).eq('id', id);
       if (error) throw error;
+      
       setTransactions(prev => prev.map(t => t.id === id ? { ...t, ...updatedData } : t));
       refreshAccounts();
     } catch (err: any) {
@@ -165,7 +187,12 @@ const App: React.FC = () => {
     try {
       const { data, error } = await supabase
         .from('accounts')
-        .insert([{ ...accData, user_id: session.user.id }])
+        .insert([{ 
+          name: accData.name, 
+          balance: accData.balance, 
+          type: accData.type, 
+          user_id: session.user.id 
+        }])
         .select();
       if (error) throw error;
       setAccounts(prev => [...prev, data[0]]);
