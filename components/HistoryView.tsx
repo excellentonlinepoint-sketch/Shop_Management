@@ -53,6 +53,20 @@ const HistoryView: React.FC<Props> = ({ transactions, onDelete, onEdit, accounts
     }
   };
 
+  // Logic to determine if a transaction increased or decreased the specific account balance
+  const isIncrease = (type: TransactionType, note?: string) => {
+    if (type === TransactionType.ADJUSTMENT) {
+      return !(note && note.includes('পার্থক্য: -'));
+    }
+    return [
+      TransactionType.INCOME, 
+      TransactionType.CAPITAL_IN, 
+      TransactionType.LOAN_TAKEN, 
+      TransactionType.LOAN_COLLECTED,
+      TransactionType.MOBILE_BANKING_RECEIVED
+    ].includes(type);
+  };
+
   const handleStartEdit = (tx: Transaction) => {
     setEditingId(tx.id);
     setEditForm({ ...tx });
@@ -80,7 +94,6 @@ const HistoryView: React.FC<Props> = ({ transactions, onDelete, onEdit, accounts
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Transactions");
     
-    // Download the file
     const dateStr = new Date().toISOString().split('T')[0];
     XLSX.writeFile(workbook, `Hishab_Khata_Backup_${dateStr}.xlsx`);
   };
@@ -117,7 +130,8 @@ const HistoryView: React.FC<Props> = ({ transactions, onDelete, onEdit, accounts
              <option value="ALL">সব ধরণ</option>
              <option value={TransactionType.INCOME}>আয়</option>
              <option value={TransactionType.EXPENSE}>ব্যয়</option>
-             <option value={TransactionType.MOBILE_BANKING_RECEIVED}>মোবাইল ব্যাংকিং</option>
+             <option value={TransactionType.MOBILE_BANKING_RECEIVED}>মোবাইল ব্যাংকিং (প্রাপ্ত)</option>
+             <option value={TransactionType.MOBILE_BANKING_SENT}>মোবাইল ব্যাংকিং (প্রেরিত)</option>
              <option value={TransactionType.LOAN_GIVEN}>পাওনা/বাকি</option>
            </select>
         </div>
@@ -202,16 +216,16 @@ const HistoryView: React.FC<Props> = ({ transactions, onDelete, onEdit, accounts
                         </td>
                         <td className="px-4 py-4 text-sm">
                           <div className="font-semibold text-slate-800 text-[13px]">{tx.category}</div>
-                          {tx.relatedLoanPerson && <div className="text-[10px] text-blue-600 font-bold">ব্যক্তি: {tx.relatedLoanPerson}</div>}
+                          {tx.relatedLoanPerson && <div className="text-[10px] text-blue-600 font-bold">ব্যক্তি/নম্বর: {tx.relatedLoanPerson}</div>}
                           {tx.note && <div className="text-[10px] text-slate-400 italic leading-tight mt-0.5">{tx.note}</div>}
                         </td>
                         <td className="px-4 py-4 text-[12px] text-slate-500">
                           {accounts.find(a => a.id === tx.accountId)?.name || 'অজানা'}
                         </td>
                         <td className={`px-4 py-4 text-sm font-bold text-right whitespace-nowrap ${
-                          [TransactionType.INCOME, TransactionType.CAPITAL_IN, TransactionType.LOAN_TAKEN, TransactionType.LOAN_COLLECTED].includes(tx.type) ? 'text-green-600' : 'text-red-600'
+                          isIncrease(tx.type, tx.note) ? 'text-green-600' : 'text-red-600'
                         }`}>
-                          ৳ {tx.amount.toLocaleString()}
+                          {isIncrease(tx.type, tx.note) ? '+' : '-'} ৳ {tx.amount.toLocaleString()}
                         </td>
                         <td className="px-4 py-4">
                           <div className="flex justify-center gap-3">
