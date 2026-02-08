@@ -1,8 +1,8 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { TransactionType, Account } from '../types';
 import { SALES_CATEGORIES, EXPENSE_CATEGORIES } from '../constants';
-import { Calendar, Tag, CreditCard, FileText, User } from 'lucide-react';
+import { Calendar, Tag, CreditCard, FileText, User, Info } from 'lucide-react';
 
 interface Props {
   type: TransactionType;
@@ -12,11 +12,18 @@ interface Props {
 
 const TransactionForm: React.FC<Props> = ({ type, accounts, onSubmit }) => {
   const [amount, setAmount] = useState('');
-  const [accountId, setAccountId] = useState(accounts[0]?.id || '');
+  const [accountId, setAccountId] = useState('');
   const [category, setCategory] = useState('');
   const [note, setNote] = useState('');
   const [person, setPerson] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+
+  // Update default account when accounts list changes
+  useEffect(() => {
+    if (accounts.length > 0 && !accountId) {
+      setAccountId(accounts[0].id);
+    }
+  }, [accounts]);
 
   const categories = type === TransactionType.INCOME ? SALES_CATEGORIES : 
                     type === TransactionType.EXPENSE ? EXPENSE_CATEGORIES : [];
@@ -29,7 +36,7 @@ const TransactionForm: React.FC<Props> = ({ type, accounts, onSubmit }) => {
       amount: parseFloat(amount),
       accountId,
       type,
-      category: category || type.toString(),
+      category: category || getDefaultCategory(),
       note,
       relatedLoanPerson: person,
       date
@@ -39,6 +46,14 @@ const TransactionForm: React.FC<Props> = ({ type, accounts, onSubmit }) => {
     setAmount('');
     setNote('');
     setPerson('');
+  };
+
+  const getDefaultCategory = () => {
+    switch(type) {
+      case TransactionType.MOBILE_BANKING_RECEIVED: return 'মোবাইল ব্যাংকিং গ্রহণ';
+      case TransactionType.MOBILE_BANKING_SENT: return 'মোবাইল ব্যাংকিং প্রদান';
+      default: return type.toString();
+    }
   };
 
   const getLabel = () => {
@@ -51,8 +66,33 @@ const TransactionForm: React.FC<Props> = ({ type, accounts, onSubmit }) => {
     }
   };
 
+  const getHelperText = () => {
+    if (type === TransactionType.MOBILE_BANKING_RECEIVED) {
+      return "কাস্টমার থেকে ক্যাশ আউট করলে: মোবাইল ব্যালেন্স বাড়বে এবং ক্যাশ বক্স থেকে টাকা কমবে।";
+    }
+    if (type === TransactionType.MOBILE_BANKING_SENT) {
+      return "কাস্টমারকে ক্যাশ ইন করে দিলে: মোবাইল ব্যালেন্স কমবে এবং ক্যাশ বক্সে টাকা বাড়বে।";
+    }
+    return null;
+  };
+
+  if (accounts.length === 0) {
+    return (
+      <div className="p-6 bg-slate-50 border border-slate-200 rounded-2xl text-center">
+        <p className="text-slate-500 font-medium">লেনদেনের জন্য কোন হিসাব (Account) পাওয়া যায়নি। দয়া করে সেটিংস থেকে একটি হিসাব যোগ করুন।</p>
+      </div>
+    );
+  }
+
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+      {getHelperText() && (
+        <div className="p-3 bg-blue-50 border border-blue-100 rounded-xl flex gap-2 items-start text-[12px] text-blue-700 leading-tight">
+           <Info size={16} className="shrink-0 mt-0.5" />
+           <p className="font-medium">{getHelperText()}</p>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {/* Amount */}
         <div className="space-y-1">
@@ -62,6 +102,7 @@ const TransactionForm: React.FC<Props> = ({ type, accounts, onSubmit }) => {
           <input
             required
             type="number"
+            step="0.01"
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
             className="w-full px-4 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
@@ -117,11 +158,12 @@ const TransactionForm: React.FC<Props> = ({ type, accounts, onSubmit }) => {
           </div>
         )}
 
-        {/* Related Person for Loans */}
-        {[TransactionType.LOAN_GIVEN, TransactionType.LOAN_TAKEN, TransactionType.LOAN_COLLECTED, TransactionType.LOAN_REPAID].includes(type) && (
+        {/* Related Person for Loans or Mobile Banking details */}
+        {([TransactionType.LOAN_GIVEN, TransactionType.LOAN_TAKEN, TransactionType.LOAN_COLLECTED, TransactionType.LOAN_REPAID].includes(type) || 
+          [TransactionType.MOBILE_BANKING_RECEIVED, TransactionType.MOBILE_BANKING_SENT].includes(type)) && (
           <div className="space-y-1 col-span-1 sm:col-span-2">
             <label className="text-xs font-semibold text-slate-500 flex items-center gap-1">
-              <User size={14} /> ব্যক্তির নাম / বিবরণ
+              <User size={14} /> {type.includes('MOBILE') ? 'কাস্টমার নম্বর / নাম' : 'ব্যক্তির নাম / বিবরণ'}
             </label>
             <input
               required
@@ -129,7 +171,7 @@ const TransactionForm: React.FC<Props> = ({ type, accounts, onSubmit }) => {
               value={person}
               onChange={(e) => setPerson(e.target.value)}
               className="w-full px-4 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none"
-              placeholder="কার সাথে লেনদেন?"
+              placeholder={type.includes('MOBILE') ? 'যেমন: 01712...' : 'কার সাথে লেনদেন?'}
             />
           </div>
         )}
